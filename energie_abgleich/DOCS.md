@@ -57,6 +57,16 @@ z. B. `http://bc122c22-eedc:8099`. Mit `preisquelle: manuell` wird EEDC nicht ab
 Hinweis Strom: Seit der PV-Anlage sinkt der Netzbezug – Vorjahreswerte ohne PV sind nur
 bedingt vergleichbar. Der Skalierungsfaktor fängt das teilweise auf; sonst `linear` wählen.
 
+## Fehlersuche Firefly
+
+| Meldung | Ursache / Lösung |
+|---|---|
+| *lehnt den Token ab (401) … Token-Länge unter 200* | Nicht der Personal Access Token kopiert (z. B. Client-Secret) oder abgeschnitten. In Firefly unter *Optionen → Profil → OAuth → Personal Access Tokens* einen neuen erstellen und vollständig kopieren. |
+| *… Firefly selbst kennt den Token nicht* | Token gelöscht/abgelaufen oder Firefly-`APP_KEY` geändert. Neuen Token erstellen. |
+| *… vorgeschalteter Proxy* | Ein Login vor Firefly (z. B. Authelia) blockt. Firefly direkt über IP:Port ansprechen. |
+| *leitet … weiter nach …* | Die angezeigte Zieladresse als `firefly_url` eintragen. |
+| *Kategorie … nicht gefunden* | Die Meldung listet die vorhandenen Kategorien – Namen übernehmen. |
+
 ## Sensoren
 
 Pro Sparte ein Gerät **Energie-Abgleich Strom/Gas/Wasser** mit u. a.:

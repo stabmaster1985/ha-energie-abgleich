@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#0E7FC1"/><stop offset="1" stop-color="#0FA37F"/></linearGradient></defs>
+  <rect width="256" height="256" rx="56" fill="url(#g)"/>
+  <!-- Waage -->
+  <g stroke="#fff" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M128 58 V196" stroke-width="12"/>
+    <path d="M84 204 H172" stroke-width="12"/>
+    <path d="M58 82 H198" stroke-width="10"/>
+    <path d="M58 82 L36 146 M58 82 L80 146" stroke-width="5" opacity=".9"/>
+    <path d="M198 82 L176 146 M198 82 L220 146" stroke-width="5" opacity=".9"/>
+  </g>
+  <circle cx="128" cy="56" r="11" fill="#fff"/>
+  <!-- Schalen -->
+  <path d="M28 146 H88 A30 22 0 0 1 28 146 Z" fill="#fff"/>
+  <path d="M168 146 H228 A30 22 0 0 1 168 146 Z" fill="#fff"/>
+  <!-- Blitz links -->
+  <path d="M63 98 L46 128 H58 L52 146 L72 114 H60 Z" fill="#FFC531" stroke="#FFC531" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Euro-Münze rechts -->
+  <circle cx="198" cy="125" r="20" fill="#FFC531"/>
+  <text x="198" y="133" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="24" fill="#0B5A8A" text-anchor="middle">€</text>
+</svg>

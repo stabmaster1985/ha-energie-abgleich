@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2
+
+- Eigenes Icon und Logo; Seitenleisten-Symbol jetzt eine Waage.
+- Firefly-Token wird bereinigt (Leerzeichen, Zeilenumbrüche, mitkopiertes „Bearer“),
+  ebenso die URL (mitkopiertes `/api` bzw. `/api/v1`).
+- Weiterleitungen (z. B. http → https) werden gemeldet statt verfolgt – beim Folgen
+  ginge der Token verloren und Firefly antwortete mit 401.
+- Bei 401 nennt die Meldung die Token-Länge und ob Firefly selbst oder ein
+  vorgeschalteter Proxy ablehnt.
+
 ## 0.2.1
 
 - **Fix:** „Kategorie gibt es in Firefly nicht“, obwohl sie existiert. Schlug der erste

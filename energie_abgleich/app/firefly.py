@@ -74,29 +74,79 @@ def klassifizieren(
     return Klassifizierung(abschlaege, einspeisung, ignoriert)
 
 
+def token_bereinigen(token: str) -> str:
+    """Entfernt Leerraum/Zeilenumbrüche, Anführungszeichen und ein mitkopiertes „Bearer“."""
+    t = "".join((token or "").split())
+    t = t.strip("\"'")
+    if t.lower().startswith("bearer"):
+        t = t[6:]
+    return t
+
+
+def url_bereinigen(url: str) -> str:
+    """Basis-URL ohne abschließendes / und ohne mitkopiertes /api bzw. /api/v1."""
+    u = (url or "").strip().rstrip("/")
+    for endung in ("/api/v1", "/api"):
+        if u.lower().endswith(endung):
+            u = u[: -len(endung)]
+    return u
+
+
 class Firefly:
     def __init__(self, sitzung: aiohttp.ClientSession, url: str, token: str):
         self._s = sitzung
-        self._url = url.rstrip("/")
+        self._url = url_bereinigen(url)
+        self._token = token_bereinigen(token)
         self._kopf = {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {self._token}",
             "Accept": "application/vnd.api+json",
         }
         # normalisierter Name -> (ID, Originalname)
         self._kategorien: dict[str, tuple[str, str]] | None = None
 
     async def _get(self, pfad: str, **params) -> dict:
+        url = f"{self._url}/api/v1/{pfad}"
         async with self._s.get(
-            f"{self._url}/api/v1/{pfad}",
+            url,
             headers=self._kopf,
             params=params,
             timeout=aiohttp.ClientTimeout(total=30),
+            # Weiterleitungen nicht folgen: aiohttp verwirft dabei den
+            # Authorization-Header, Firefly sähe dann gar keinen Token.
+            allow_redirects=False,
         ) as r:
+            if r.status in (301, 302, 303, 307, 308):
+                ziel = r.headers.get("Location", "?")
+                raise FireflyFehler(
+                    f"Firefly leitet {url} weiter nach {ziel}. Bitte diese Adresse "
+                    "(ohne /api/…) als firefly_url eintragen."
+                )
             if r.status == 401:
-                raise FireflyFehler("Firefly-Token ungültig (401).")
+                raise FireflyFehler(await self._diagnose_401(r))
             if r.status >= 400:
                 raise FireflyFehler(f"Firefly antwortet mit {r.status} für {pfad}.")
-            return await r.json(content_type=None)
+            try:
+                return await r.json(content_type=None)
+            except ValueError:
+                raise FireflyFehler(
+                    f"Antwort von {url} ist kein JSON – zeigt firefly_url wirklich auf Firefly III?"
+                ) from None
+
+    async def _diagnose_401(self, r: aiohttp.ClientResponse) -> str:
+        text = (await r.text())[:300]
+        teile = [f"Firefly lehnt den Token ab (401) – Token-Länge {len(self._token)} Zeichen"]
+        if len(self._token) < 200:
+            teile.append(
+                "ein Personal Access Token ist meist über 900 Zeichen lang; "
+                "evtl. wurde Client-ID/Secret statt des Tokens kopiert oder der Token abgeschnitten"
+            )
+        if "Unauthenticated" in text:
+            teile.append("Firefly selbst kennt den Token nicht (abgelaufen, gelöscht, oder APP_KEY geändert)")
+        elif r.headers.get("WWW-Authenticate", "").lower().startswith("basic") or "<html" in text.lower():
+            teile.append(
+                "die Ablehnung kommt vermutlich von einem vorgeschalteten Proxy/Login, nicht von Firefly"
+            )
+        return "; ".join(teile) + "."
 
     async def _alle_seiten(self, pfad: str, **params) -> list[dict]:
         seiten = []

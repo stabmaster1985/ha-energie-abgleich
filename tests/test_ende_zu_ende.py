@@ -227,3 +227,32 @@ async def test_kategorien_nach_fehlschlag_und_diagnose():
         assert await ff.kategorie_id("Gelsenwasser") == "8"
         with pytest.raises(FireflyFehler, match="„Gelsenwasser“, „ strom “"):
             await ff.kategorie_id("Gas")
+
+
+def test_token_und_url_bereinigen():
+    from app.firefly import token_bereinigen, url_bereinigen
+
+    assert token_bereinigen("  Bearer eyJabc\n def ") == "eyJabcdef"
+    assert token_bereinigen('"eyJ"') == "eyJ"
+    assert url_bereinigen("http://ff:8080/api/v1/") == "http://ff:8080"
+    assert url_bereinigen("http://ff:8080/api") == "http://ff:8080"
+
+
+@pytest.mark.asyncio
+async def test_firefly_401_und_weiterleitung_diagnose():
+    async def unauth(_):
+        return web.json_response({"message": "Unauthenticated.", "exception": "AuthenticationException"}, status=401)
+
+    async def umleitung(_):
+        raise web.HTTPFound("https://firefly.example/api/v1/categories")
+
+    app = web.Application()
+    app.router.add_get("/a/api/v1/categories", unauth)
+    app.router.add_get("/b/api/v1/categories", umleitung)
+    async with TestServer(app) as srv, aiohttp.ClientSession() as s:
+        from app.firefly import FireflyFehler
+
+        with pytest.raises(FireflyFehler, match="Token-Länge 4.*Firefly selbst kennt den Token nicht"):
+            await Firefly(s, str(srv.make_url("/a")), "kurz\n").kategorie_id("Strom")
+        with pytest.raises(FireflyFehler, match="leitet .* weiter nach https://firefly.example"):
+            await Firefly(s, str(srv.make_url("/b")), "x").kategorie_id("Strom")
