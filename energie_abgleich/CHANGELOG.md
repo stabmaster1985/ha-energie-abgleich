@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- **Fix:** „Kategorie gibt es in Firefly nicht“, obwohl sie existiert. Schlug der erste
+  Abruf der Kategorien fehl, blieb der Zwischenspeicher leer bis zum Neustart. Jetzt wird
+  bei unbekanntem Namen neu geladen und erst nach erfolgreichem Abruf gespeichert.
+- Kategorienamen werden unabhängig von Groß-/Kleinschreibung und Leerzeichen verglichen.
+- Die Fehlermeldung nennt die Kategorien, die Firefly für den Token liefert.
+
 ## 0.2.0
 
 - **Fix:** Anmeldung an Home Assistant schlug fehl („Anmeldung bei Home Assistant

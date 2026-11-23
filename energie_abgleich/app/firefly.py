@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 
@@ -26,6 +27,11 @@ class Klassifizierung:
 
 class FireflyFehler(Exception):
     pass
+
+
+def normalisieren(name: str) -> str:
+    """Vergleichsform: Unicode-NFC, Groß/Klein egal, Leerraum zusammengefasst."""
+    return " ".join(unicodedata.normalize("NFC", name or "").casefold().split())
 
 
 def parse_buchungen(antwort: dict, kategorie_id: str) -> list[Buchung]:
@@ -76,7 +82,8 @@ class Firefly:
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.api+json",
         }
-        self._kategorien: dict[str, str] | None = None
+        # normalisierter Name -> (ID, Originalname)
+        self._kategorien: dict[str, tuple[str, str]] | None = None
 
     async def _get(self, pfad: str, **params) -> dict:
         async with self._s.get(
@@ -105,15 +112,25 @@ class Firefly:
             seite += 1
 
     async def kategorie_id(self, name: str) -> str:
-        if self._kategorien is None:
-            self._kategorien = {}
-            for antwort in await self._alle_seiten("categories"):
-                for k in antwort.get("data", []):
-                    self._kategorien[k["attributes"]["name"].strip().lower()] = str(k["id"])
-        try:
-            return self._kategorien[name.strip().lower()]
-        except KeyError:
-            raise FireflyFehler(f"Kategorie „{name}“ gibt es in Firefly nicht.") from None
+        schluessel = normalisieren(name)
+        if self._kategorien is not None and schluessel in self._kategorien:
+            return self._kategorien[schluessel][0]
+        # Nicht (mehr) im Zwischenspeicher: frisch laden. Erst nach erfolgreichem
+        # Abruf speichern, damit ein Fehler den Speicher nicht leer zurücklässt.
+        geladen: dict[str, tuple[str, str]] = {}
+        for antwort in await self._alle_seiten("categories"):
+            for k in antwort.get("data", []):
+                original = k.get("attributes", {}).get("name", "")
+                geladen[normalisieren(original)] = (str(k["id"]), original)
+        self._kategorien = geladen
+        if schluessel in geladen:
+            return geladen[schluessel][0]
+        vorhanden = ", ".join(f"„{o}“" for _, o in sorted(geladen.values(), key=lambda x: normalisieren(x[1])))
+        raise FireflyFehler(
+            f"Kategorie „{name}“ nicht gefunden. Firefly liefert für diesen Token "
+            + (f"{len(geladen)} Kategorien: {vorhanden}." if geladen else "keine Kategorien – "
+               "gehört der Token zum richtigen Firefly-Benutzer?")
+        )
 
     async def buchungen(self, kategorie: str, start: date, ende: date) -> list[Buchung]:
         kid = await self.kategorie_id(kategorie)

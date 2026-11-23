@@ -200,3 +200,30 @@ async def test_alle_sparten(monkeypatch):
             assert zustaende["sensor.energie_abgleich_strom_saldo_prognose"]["state"] == strom["abrechnung"]["saldo"]
             assert "sensor.energie_abgleich_strom_einspeisung_prognose" in zustaende
             await ha.schliessen()
+
+
+@pytest.mark.asyncio
+async def test_kategorien_nach_fehlschlag_und_diagnose():
+    """Ein fehlgeschlagener erster Abruf darf den Zwischenspeicher nicht leer zurücklassen."""
+    aufrufe = {"n": 0}
+
+    async def categories(_):
+        aufrufe["n"] += 1
+        if aufrufe["n"] == 1:
+            return web.Response(status=500)
+        return web.json_response({"data": [{"id": "7", "attributes": {"name": " strom "}},
+                                           {"id": "8", "attributes": {"name": "Gelsenwasser"}}],
+                                  "meta": {"pagination": {"total_pages": 1}}})
+
+    app = web.Application()
+    app.router.add_get("/api/v1/categories", categories)
+    async with TestServer(app) as srv, aiohttp.ClientSession() as s:
+        from app.firefly import FireflyFehler
+
+        ff = Firefly(s, str(srv.make_url("")), "t")
+        with pytest.raises(FireflyFehler, match="500"):
+            await ff.kategorie_id("Strom")
+        assert await ff.kategorie_id("Strom") == "7"  # Groß/Klein + Leerzeichen egal
+        assert await ff.kategorie_id("Gelsenwasser") == "8"
+        with pytest.raises(FireflyFehler, match="„Gelsenwasser“, „ strom “"):
+            await ff.kategorie_id("Gas")
