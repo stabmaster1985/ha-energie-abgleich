@@ -97,9 +97,11 @@ async def sparte_berechnen(
         "einheit": abrechnungseinheit,
         "zaehler_einheit": einheit_zaehler,
     }
+    vj_monate = p.vorjahr_je_monat(vj.werte)
     ergebnis["verlauf"] = [
         {**m, "ist": round(m["ist"] * faktor, 2), "prognose": round(m["prognose"] * faktor, 2),
-         "kumuliert": round(m["kumuliert"] * faktor, 2)}
+         "kumuliert": round(m["kumuliert"] * faktor, 2),
+         "vorjahr": round(vj_monate[m["monat"]] * faktor, 2) if m["monat"] in vj_monate else None}
         for m in p.monatsverlauf(ber.werte, mp.rest_je_tag, start, ende)
     ]
     # --- Preise ----------------------------------------------------------
@@ -129,6 +131,42 @@ async def sparte_berechnen(
         )
     kosten = rechnung.kosten
 
+    # --- Vorjahr: Verbrauch und Kosten -----------------------------------
+    vj_tage = (start - vorjahr_start).days
+    vj_abdeckung = len(vj.werte) / vj_tage if vj_tage else 0.0
+    vj_rechnung = p.kosten_tagesgenau(
+        vj.werte, tarife, vorjahr_start, start,
+        sparte.preis_eur_einheit, sparte.grundpreis_eur_monat, faktor,
+    )
+    vj_menge = sum(vj.werte.values()) * faktor
+    vorjahr: dict = {
+        "zeitraum": {"start": vorjahr_start.isoformat(),
+                     "ende": (start - timedelta(days=1)).isoformat()},
+        "abdeckung": round(vj_abdeckung, 3),
+        "menge": round(vj_menge, 2),
+        "veraenderung": (
+            round((mp.gesamt * faktor - vj_menge) / vj_menge, 4)
+            if vj_menge > 0 and vj_abdeckung >= p.MIN_ABDECKUNG_VORJAHR else None
+        ),
+        "kosten": round(vj_rechnung.kosten, 2) if vj.werte else None,
+        "preis_hinweis": (
+            "zu den damaligen Preisen aus EEDC"
+            if tarife and vj_rechnung.tage_ohne_tarif == 0
+            else "zu den aktuellen Preisen aus den Optionen"
+            if not tarife else
+            f"EEDC-Preise, {vj_rechnung.tage_ohne_tarif} Tage zu den Preisen aus den Optionen"
+        ),
+        "gezahlt": None,
+        "anzahl_gezahlt": None,
+        "saldo": None,
+        "abrechnung": None,
+        "abrechnung_buchungen": [],
+    }
+    if 0 < vj_abdeckung < 0.9:
+        ergebnis["hinweise"].append(
+            f"Vorjahr nur zu {vj_abdeckung:.0%} mit Zählerdaten abgedeckt – Vorjahreswerte unvollständig."
+        )
+
     # --- Zahlungen ------------------------------------------------------
     abschlaege: list = []
     einspeisung_buchungen: list = []
@@ -147,6 +185,24 @@ async def sparte_berechnen(
                 "abschlaege": [_buchung_dict(b) for b in k.abschlaege],
                 "ignoriert": [{**_buchung_dict(b), "grund": g} for b, g in k.ignoriert],
             }
+            # Abrechnung des Vorjahres = im laufenden Jahr gebuchte Nachzahlungen
+            # (Ausgaben) bzw. Erstattungen (Einnahmen) mit Ausschluss-Stichwort.
+            abr = [(b, g) for b, g in k.ignoriert if g == "Ausschluss-Stichwort"]
+            if abr:
+                vorjahr["abrechnung"] = round(
+                    sum(b.betrag if b.typ == "withdrawal" else -b.betrag for b, _ in abr), 2
+                )
+                vorjahr["abrechnung_buchungen"] = [
+                    {**_buchung_dict(b), "typ": b.typ} for b, _ in abr
+                ]
+            vj_buchungen = await firefly.buchungen(
+                sparte.kategorie, vorjahr_start, start - timedelta(days=1)
+            )
+            vk = klassifizieren(vj_buchungen, konfig.ausschluss_stichworte, None)
+            vorjahr["gezahlt"] = round(sum(b.betrag for b in vk.abschlaege), 2)
+            vorjahr["anzahl_gezahlt"] = len(vk.abschlaege)
+            if vorjahr["kosten"] is not None:
+                vorjahr["saldo"] = round(vorjahr["kosten"] - vorjahr["gezahlt"], 2)
         except Exception as e:  # noqa: BLE001 – Fehler anzeigen statt abbrechen
             LOG.warning("Firefly (%s): %s", sparte.kategorie, e)
             ergebnis["hinweise"].append(f"Firefly: {e}")
@@ -179,6 +235,8 @@ async def sparte_berechnen(
         "arbeitskosten": round(rechnung.arbeitskosten, 2),
         "grundkosten": round(rechnung.grundkosten, 2),
     }
+
+    ergebnis["vorjahr"] = vorjahr
 
     # --- Einspeisung (nur Strom) -----------------------------------------
     if sparte.name == "strom" and sparte.einspeisung_aktiv:

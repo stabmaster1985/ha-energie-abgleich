@@ -80,6 +80,23 @@ def ein_jahr_frueher(tag: date) -> date:
         return tag.replace(year=tag.year - 1, day=28)
 
 
+def ein_jahr_spaeter(tag: date) -> date:
+    try:
+        return tag.replace(year=tag.year + 1)
+    except ValueError:  # 29. Februar
+        return tag.replace(year=tag.year + 1, day=28)
+
+
+def vorjahr_je_monat(vorjahr_werte: dict[date, float]) -> dict[str, float]:
+    """Vorjahresmengen, um ein Jahr verschoben, als Monatssummen ("JJJJ-MM")."""
+    monate: dict[str, float] = {}
+    for t, v in vorjahr_werte.items():
+        z = ein_jahr_spaeter(t)
+        k = f"{z.year}-{z.month:02d}"
+        monate[k] = monate.get(k, 0.0) + v
+    return monate
+
+
 def tage(start: date, ende: date):
     t = start
     while t < ende:

@@ -23,6 +23,10 @@ SENSOREN = {
     "saldo_prognose": ("Saldo Prognose", "EUR", "monetary", "mdi:scale-balance"),
     "abschlag_empfehlung": ("Abschlag Empfehlung", "EUR", "monetary", "mdi:cash-sync"),
     "abschlag_empfehlung_folgejahr": ("Abschlag Empfehlung Folgejahr", "EUR", "monetary", "mdi:calendar-arrow-right"),
+    "vorjahr_verbrauch": ("Vorjahr Verbrauch", "{einheit}", None, "mdi:history"),
+    "vorjahr_kosten": ("Vorjahr Kosten", "EUR", "monetary", "mdi:cash-clock"),
+    "vorjahr_saldo": ("Vorjahr Saldo berechnet", "EUR", "monetary", "mdi:scale-balance"),
+    "vorjahr_abrechnung": ("Vorjahr Abrechnung", "EUR", "monetary", "mdi:file-document-check"),
     "einspeisung_prognose": ("Einspeisevergütung Prognose", "EUR", "monetary", "mdi:solar-power"),
     "einspeisung_erhalten": ("Einspeisevergütung erhalten", "EUR", "monetary", "mdi:solar-power-variant"),
 }
@@ -42,6 +46,12 @@ def sensor_werte(ergebnis: dict) -> dict:
         "abschlag_empfehlung": a.get("empfehlung_rest"),
         "abschlag_empfehlung_folgejahr": a.get("empfehlung_folgejahr"),
     }
+    vj = ergebnis.get("vorjahr")
+    if vj:
+        werte["vorjahr_verbrauch"] = vj.get("menge")
+        werte["vorjahr_kosten"] = vj.get("kosten")
+        werte["vorjahr_saldo"] = vj.get("saldo")
+        werte["vorjahr_abrechnung"] = vj.get("abrechnung")
     if e:
         werte["einspeisung_prognose"] = e.get("verguetung_prognose")
         werte["einspeisung_erhalten"] = e.get("erhalten")

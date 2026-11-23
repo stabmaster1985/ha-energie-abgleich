@@ -57,6 +57,22 @@ z. B. `http://bc122c22-eedc:8099`. Mit `preisquelle: manuell` wird EEDC nicht ab
 Hinweis Strom: Seit der PV-Anlage sinkt der Netzbezug – Vorjahreswerte ohne PV sind nur
 bedingt vergleichbar. Der Skalierungsfaktor fängt das teilweise auf; sonst `linear` wählen.
 
+## Vorjahr
+
+Unter jeder Sparte steht ein Rückblick auf das abgeschlossene Abrechnungsjahr:
+
+- **Verbrauch** aus der Langzeitstatistik (mit Hinweis, falls Zählerdaten fehlen)
+- **Kosten berechnet** – Strom mit EEDC zu den damals gültigen Preisen, sonst zu den
+  aktuellen Preisen aus den Optionen (steht jeweils dabei)
+- **Abschläge gezahlt** aus Firefly im Vorjahreszeitraum
+- **Saldo berechnet** = Kosten − Abschläge
+- **Laut Abrechnung**: Buchungen im laufenden Jahr mit einem Ausschluss-Stichwort
+  (z. B. „Nachzahlung“ als Ausgabe, „Erstattung“ als Einnahme)
+
+Der Vergleich *berechnet ↔ laut Abrechnung* zeigt, wie gut Preise und Zähler stimmen.
+Große Abweichungen deuten auf falsche Preise, fehlende Zählerdaten oder einen
+abweichenden Zählerstand in der Abrechnung hin.
+
 ## Fehlersuche Firefly
 
 | Meldung | Ursache / Lösung |
@@ -77,6 +93,7 @@ Pro Sparte ein Gerät **Energie-Abgleich Strom/Gas/Wasser** mit u. a.:
 - `sensor.energie_abgleich_<sparte>_abschlag_empfehlung` (restliche Monate)
 - `sensor.energie_abgleich_<sparte>_abschlag_empfehlung_folgejahr`
 - `sensor.energie_abgleich_<sparte>_verbrauch_bisher` / `_verbrauch_prognose`
+- `sensor.energie_abgleich_<sparte>_vorjahr_verbrauch` / `_vorjahr_kosten` / `_vorjahr_saldo` / `_vorjahr_abrechnung`
 
 Hinweise (z. B. Datenlücken) stehen im Attribut `hinweise`.
 

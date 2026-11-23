@@ -90,7 +90,8 @@ def fake_firefly() -> web.Application:
             "date": f"{tag.isoformat()}T00:00:00+01:00", "description": text}]}}
 
     buchungen = {
-        "1": [gruppe(f"s{m}", "1", "withdrawal", 90, date(2026, m, 15), "Abschlag Strom") for m in range(1, 12)]
+        "1": [gruppe(f"v{m}", "1", "withdrawal", 80, date(2025, m, 15), "Abschlag Strom") for m in range(1, 13)]
+             + [gruppe(f"s{m}", "1", "withdrawal", 90, date(2026, m, 15), "Abschlag Strom") for m in range(1, 12)]
              + [gruppe("s99", "1", "withdrawal", 312.5, date(2026, 2, 1), "Nachzahlung Jahresabrechnung 2025")],
         "2": [gruppe(f"g{m}", "2", "withdrawal", 120, date(2026, m, 1), "Abschlag Gas") for m in range(1, 12)],
         "3": [gruppe(f"w{m}", "3", "withdrawal", 35, date(2026, m, 1), "Gelsenwasser Abschlag") for m in range(1, 12)]
@@ -103,7 +104,10 @@ def fake_firefly() -> web.Application:
                                   "meta": {"pagination": {"total_pages": 1}}})
 
     async def transactions(request):
-        alle = buchungen[request.match_info["kid"]]
+        von = date.fromisoformat(request.query["start"])
+        bis = date.fromisoformat(request.query["end"])
+        alle = [g for g in buchungen[request.match_info["kid"]]
+                if von <= date.fromisoformat(g["attributes"]["transactions"][0]["date"][:10]) <= bis]
         seite = int(request.query.get("page", 1))
         teile = [alle[:6], alle[6:]]  # zwei Seiten
         return web.json_response({"data": teile[seite - 1], "meta": {"pagination": {"total_pages": 2}}})
@@ -180,6 +184,15 @@ async def test_alle_sparten(monkeypatch):
             assert len(strom["preise"]["tarife"]) == 2
             assert strom["abrechnung"]["kosten_prognose"] == pytest.approx(kosten)
             assert strom["abrechnung"]["saldo"] == pytest.approx(kosten - 12 * 90)
+            vj = strom["vorjahr"]
+            assert vj["zeitraum"] == {"start": "2025-01-01", "ende": "2025-12-31"}
+            assert vj["menge"] == pytest.approx(365 * 8)
+            assert vj["kosten"] == pytest.approx(365 * 8 * 0.30 + 144)  # Tarif „Alt“ aus EEDC
+            assert vj["preis_hinweis"] == "zu den damaligen Preisen aus EEDC"
+            assert vj["anzahl_gezahlt"] == 12 and vj["gezahlt"] == pytest.approx(960)
+            assert vj["saldo"] == pytest.approx(vj["kosten"] - 960)
+            assert vj["abrechnung"] == pytest.approx(312.5)  # Nachzahlung in 2026 gebucht
+            assert strom["verlauf"][0]["vorjahr"] == pytest.approx(31 * 8)
             assert strom["einspeisung"]["menge_prognose"] == pytest.approx(365 * 5)
             assert strom["einspeisung"]["erhalten"] == 0
 
@@ -193,12 +206,15 @@ async def test_alle_sparten(monkeypatch):
             assert len(wasser["datenqualitaet"]["entfernte_werte"]) == 1
             assert wasser["abrechnung"]["anzahl_gezahlt"] == 11
             assert any("Erstattung" in b["beschreibung"] for b in wasser["buchungen"]["ignoriert"])
+            assert wasser["vorjahr"]["abrechnung"] == pytest.approx(-40)  # Erstattung
+            assert wasser["vorjahr"]["preis_hinweis"] == "zu den aktuellen Preisen aus den Optionen"
 
             # Ausgabe ohne MQTT -> REST-Fallback
             ausgabe = Ausgabe(ha, None)
             await ausgabe.veroeffentlichen("strom", "Strom", "kWh", strom)
             assert zustaende["sensor.energie_abgleich_strom_saldo_prognose"]["state"] == strom["abrechnung"]["saldo"]
             assert "sensor.energie_abgleich_strom_einspeisung_prognose" in zustaende
+            assert zustaende["sensor.energie_abgleich_strom_vorjahr_abrechnung"]["state"] == 312.5
             await ha.schliessen()
 
 

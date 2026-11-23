@@ -1,5 +1,5 @@
 name: Energie-Abgleich
-version: "0.2.2"
+version: "0.3.0"
 slug: energie_abgleich
 description: >-
   Prognose der Jahresabrechnung für Strom, Gas und Wasser aus den Zählern in

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- **Neu: Vorjahr.** Je Sparte ein Rückblick auf das abgeschlossene Abrechnungsjahr:
+  Verbrauch (mit Veränderung zur aktuellen Prognose), berechnete Kosten, gezahlte
+  Abschläge, berechneter Saldo und – zum Vergleich – die tatsächliche Abrechnung
+  (Nachzahlung/Erstattung, die im laufenden Jahr in Firefly gebucht wurde).
+- Diagramm zeigt den Vorjahresverbrauch je Monat als Marke.
+- Neue Sensoren `vorjahr_verbrauch`, `vorjahr_kosten`, `vorjahr_saldo`, `vorjahr_abrechnung`.
+
 ## 0.2.2
 
 - Eigenes Icon und Logo; Seitenleisten-Symbol jetzt eine Waage.

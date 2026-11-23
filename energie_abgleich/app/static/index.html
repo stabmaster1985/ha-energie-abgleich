@@ -8,13 +8,13 @@
   :root {
     --bg: #f5f6f8; --karte: #ffffff; --text: #1c1f24; --leise: #5f6670;
     --linie: #e3e6ea; --akzent: #03a9f4; --ist: #2b7fd9; --prog: #9fc6ef;
-    --gut: #1e8e4a; --schlecht: #c62828; --warn-bg: #fff6e0; --warn: #8a5a00;
+    --vj: #e8890c; --gut: #1e8e4a; --schlecht: #c62828; --warn-bg: #fff6e0; --warn: #8a5a00;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #111316; --karte: #1c1f24; --text: #e8eaed; --leise: #9aa1ab;
       --linie: #2c3037; --ist: #5aa2ee; --prog: #2f4e70;
-      --gut: #4cc27a; --schlecht: #ef6461; --warn-bg: #3a2f14; --warn: #f0c66b;
+      --vj: #f5a742; --gut: #4cc27a; --schlecht: #ef6461; --warn-bg: #3a2f14; --warn: #f0c66b;
     }
   }
   * { box-sizing: border-box; }
@@ -46,6 +46,10 @@
   .legende { display: flex; gap: 14px; font-size: 12px; color: var(--leise); }
   .legende span::before { content: ""; display: inline-block; width: 10px; height: 10px;
                           border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+  .vorjahr { border-top: 1px solid var(--linie); margin-top: 12px; padding-top: 10px; }
+  .vorjahr h3 { font-size: 14px; margin: 0; font-weight: 600; }
+  .vorjahr .zeitraum { margin-bottom: 0; }
+  .delta { font-size: 12px; color: var(--leise); }
   details { margin-top: 10px; font-size: 13px; }
   summary { cursor: pointer; color: var(--leise); }
   table { width: 100%; border-collapse: collapse; margin-top: 6px; }
@@ -74,20 +78,43 @@ const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","No
 function diagramm(verlauf, einheit) {
   if (!verlauf || !verlauf.length) return "";
   const B = 360, H = 150, L = 4, U = 20, O = 8;
-  const max = Math.max(...verlauf.map(m => m.ist + m.prognose), 1e-9);
+  const max = Math.max(...verlauf.map(m => Math.max(m.ist + m.prognose, m.vorjahr ?? 0)), 1e-9);
   const bw = (B - L) / verlauf.length;
   const balken = verlauf.map((m, i) => {
     const x = L + i * bw + bw * 0.15, w = bw * 0.7;
     const hi = (m.ist / max) * (H - U - O), hp = (m.prognose / max) * (H - U - O);
     const y0 = H - U;
-    const titel = `${m.monat}: Ist ${zahl(m.ist, 1)} ${einheit}, Prognose ${zahl(m.prognose, 1)} ${einheit}`;
+    const titel = `${m.monat}: Ist ${zahl(m.ist, 1)} ${einheit}, Prognose ${zahl(m.prognose, 1)} ${einheit}`
+      + (m.vorjahr != null ? `, Vorjahr ${zahl(m.vorjahr, 1)} ${einheit}` : "");
+    const yv = m.vorjahr != null ? y0 - (m.vorjahr / max) * (H - U - O) : null;
     return `<g><title>${esc(titel)}</title>
       <rect x="${x}" y="${y0 - hi}" width="${w}" height="${hi}" rx="2" fill="var(--ist)"/>
       <rect x="${x}" y="${y0 - hi - hp}" width="${w}" height="${hp}" rx="2" fill="var(--prog)"/>
+      ${yv != null ? `<line x1="${x - 2}" x2="${x + w + 2}" y1="${yv}" y2="${yv}" stroke="var(--vj)" stroke-width="2.5" stroke-linecap="round"/>` : ""}
       <text x="${x + w / 2}" y="${H - 6}" font-size="9" text-anchor="middle" fill="var(--leise)">${MONATE[+m.monat.slice(5) - 1]}</text></g>`;
   }).join("");
   return `<svg viewBox="0 0 ${B} ${H}" role="img" aria-label="Verbrauch je Monat">${balken}</svg>
-    <div class="legende"><span style="--c:var(--ist)">Ist</span><span style="--c:var(--prog)">Prognose</span><span>je Monat in ${esc(einheit)}</span></div>`;
+    <div class="legende"><span style="--c:var(--ist)">Ist</span><span style="--c:var(--prog)">Prognose</span>${verlauf.some(m => m.vorjahr != null) ? `<span style="--c:var(--vj)">Vorjahr</span>` : ""}<span>je Monat in ${esc(einheit)}</span></div>`;
+}
+
+function vorjahrBlock(v, einheit) {
+  if (!v || !v.menge) return "";
+  const saldoText = x => x == null ? "–" : `${eur.format(Math.abs(x))} ${x > 0 ? "Nachzahlung" : x < 0 ? "Erstattung" : ""}`;
+  const delta = v.veraenderung == null ? "" :
+    `<div class="delta">Prognose dieses Jahr: ${v.veraenderung > 0 ? "+" : ""}${zahl(v.veraenderung * 100, 1)} %</div>`;
+  const abr = v.abrechnung_buchungen.map(b => `${datum(b.datum)} · ${esc(b.beschreibung)}`).join("<br>");
+  return `<div class="vorjahr">
+    <h3>Vorjahr</h3>
+    <div class="zeitraum">${datum(v.zeitraum.start)} – ${datum(v.zeitraum.ende)}${v.abdeckung < 0.9 ? ` · nur ${zahl(v.abdeckung * 100)} % Zählerdaten` : ""}</div>
+    <dl>
+      <dt>Verbrauch</dt><dd>${zahl(v.menge, 0)} ${esc(einheit)}${delta}</dd>
+      <dt>Kosten berechnet <span class="delta">(${esc(v.preis_hinweis)})</span></dt><dd>${v.kosten == null ? "–" : eur.format(v.kosten)}</dd>
+      ${v.gezahlt != null ? `<dt>Abschläge gezahlt (${v.anzahl_gezahlt})</dt><dd>${eur.format(v.gezahlt)}</dd>` : ""}
+      ${v.saldo != null ? `<dt>Saldo berechnet</dt><dd>${saldoText(v.saldo)}</dd>` : ""}
+      <dt>Laut Abrechnung</dt><dd>${v.abrechnung == null ? "noch nicht gebucht" : `<strong>${saldoText(v.abrechnung)}</strong>`}</dd>
+    </dl>
+    ${abr ? `<div class="delta">${abr}</div>` : ""}
+  </div>`;
 }
 
 function karte(s) {
@@ -124,6 +151,7 @@ function karte(s) {
       <dt>Passender Abschlag Folgejahr</dt><dd>${eur.format(a.empfehlung_folgejahr)}</dd>
     </dl>
     ${einsp}
+    ${vorjahrBlock(s.vorjahr, m.einheit)}
     ${diagramm(s.verlauf, m.einheit)}
     ${hinweise}
     <details><summary>Details</summary>
