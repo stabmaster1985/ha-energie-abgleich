@@ -8,6 +8,11 @@ configuration:
   aktualisierung_minuten:
     name: Aktualisierung (Minuten)
     description: Wie oft neu berechnet wird.
+  eedc_url:
+    name: EEDC-Adresse (optional)
+    description: >-
+      Leer lassen = automatisch suchen. Sonst z. B. http://bc122c22-eedc:8099
+      (Hostname steht auf der EEDC-Add-on-Seite).
   ausschluss_stichworte:
     name: Ausschluss-Stichwörter
     description: >-
@@ -15,7 +20,7 @@ configuration:
       Abschlag (z. B. Nachzahlungen oder Erstattungen der Vorjahresabrechnung).
   strom:
     name: Strom
-    description: Tarif und Einstellungen für Strom. Zähler leer lassen = aus dem Energie-Dashboard.
+    description: Tarif und Einstellungen für Strom. Zähler leer lassen = aus dem Energie-Dashboard. preisquelle eedc = Preise aus EEDC, Arbeitspreis hier nur als Ersatz.
   gas:
     name: Gas
     description: Tarif und Einstellungen für Gas. Brennwert und Zustandszahl stehen auf der Jahresabrechnung.

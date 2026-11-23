@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta
 
 from . import prognose as p
+from .eedc import EEDCTarife
 from .firefly import Firefly, klassifizieren
 from .homeassistant import HomeAssistant
 from .konfiguration import Konfiguration, Sparte
@@ -25,6 +26,7 @@ async def sparte_berechnen(
     ha: HomeAssistant,
     firefly: Firefly | None,
     erkannte_zaehler: dict[str, str | None],
+    eedc: EEDCTarife | None = None,
 ) -> dict:
     heute = ha.heute()
     start, ende = p.abrechnungszeitraum(sparte.abrechnungsbeginn, heute)
@@ -100,7 +102,32 @@ async def sparte_berechnen(
          "kumuliert": round(m["kumuliert"] * faktor, 2)}
         for m in p.monatsverlauf(ber.werte, mp.rest_je_tag, start, ende)
     ]
-    kosten = p.kosten(mp.gesamt * faktor, sparte.preis_eur_einheit, sparte.grundpreis_eur_monat)
+    # --- Preise ----------------------------------------------------------
+    tarife: list[p.Tarif] = []
+    preisquelle = "Add-on-Optionen"
+    if sparte.name == "strom" and sparte.preisquelle == "eedc":
+        if eedc is not None:
+            tarife = eedc.tarife
+            preisquelle = f"EEDC ({eedc.url})"
+        else:
+            ergebnis["hinweise"].append(
+                "EEDC nicht erreichbar – Arbeitspreis aus den Add-on-Optionen verwendet."
+            )
+    rechnung = p.kosten_tagesgenau(
+        {**ber.werte, **mp.rest_je_tag},
+        tarife,
+        start,
+        ende,
+        sparte.preis_eur_einheit,
+        sparte.grundpreis_eur_monat,
+        faktor,
+    )
+    if tarife and rechnung.tage_ohne_tarif:
+        ergebnis["hinweise"].append(
+            f"Für {rechnung.tage_ohne_tarif} Tage ist in EEDC kein Tarif hinterlegt – "
+            "dort gilt der Preis aus den Add-on-Optionen."
+        )
+    kosten = rechnung.kosten
 
     # --- Zahlungen ------------------------------------------------------
     abschlaege: list = []
@@ -129,8 +156,28 @@ async def sparte_berechnen(
     )
     ergebnis["abrechnung"] = a.__dict__
     ergebnis["preise"] = {
-        "preis_eur_einheit": sparte.preis_eur_einheit,
-        "grundpreis_eur_jahr": round(sparte.grundpreis_eur_monat * 12, 2),
+        "quelle": preisquelle,
+        "tarife": [
+            {
+                "name": t.name,
+                "gueltig_ab": t.gueltig_ab.isoformat(),
+                "gueltig_bis": t.gueltig_bis.isoformat() if t.gueltig_bis else None,
+                "preis_eur_einheit": t.preis_eur_einheit,
+                "grundpreis_eur_monat": t.grundpreis_eur_monat,
+            }
+            for t in rechnung.verwendete_tarife
+        ]
+        or [
+            {
+                "name": None,
+                "gueltig_ab": None,
+                "gueltig_bis": None,
+                "preis_eur_einheit": sparte.preis_eur_einheit,
+                "grundpreis_eur_monat": sparte.grundpreis_eur_monat,
+            }
+        ],
+        "arbeitskosten": round(rechnung.arbeitskosten, 2),
+        "grundkosten": round(rechnung.grundkosten, 2),
     }
 
     # --- Einspeisung (nur Strom) -----------------------------------------
@@ -143,12 +190,16 @@ async def sparte_berechnen(
             e_ist = p.bereinigen({t: v for t, v in e_roh.items() if t >= start}, start, heute)
             e_vj = p.bereinigen({t: v for t, v in e_roh.items() if t < start}, vorjahr_start, start)
             ep = p.prognose_menge(e_ist.werte, e_vj.werte, start, ende, heute, "auto", "einspeisung")
+            satz = sparte.einspeiseverguetung_eur_kwh
+            if sparte.preisquelle == "eedc" and eedc and eedc.einspeiseverguetung_eur_kwh:
+                satz = eedc.einspeiseverguetung_eur_kwh
             ergebnis["einspeisung"] = {
                 "zaehler": ez,
                 "menge_ist": round(ep.ist, 2),
                 "menge_prognose": round(ep.gesamt, 2),
-                "verguetung_soll_bisher": round(ep.ist * sparte.einspeiseverguetung_eur_kwh, 2),
-                "verguetung_prognose": round(ep.gesamt * sparte.einspeiseverguetung_eur_kwh, 2),
+                "verguetung_soll_bisher": round(ep.ist * satz, 2),
+                "verguetung_prognose": round(ep.gesamt * satz, 2),
+                "satz_eur_kwh": satz,
                 "erhalten": round(sum(b.betrag for b in einspeisung_buchungen), 2),
                 "buchungen": [_buchung_dict(b) for b in einspeisung_buchungen],
             }

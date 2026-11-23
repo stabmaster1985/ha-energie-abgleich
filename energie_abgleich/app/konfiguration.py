@@ -36,6 +36,8 @@ class Sparte:
     einspeise_zaehler: str | None = None
     einspeiseverguetung_eur_kwh: float = 0.0
     einspeise_stichwort: str = "Einspeis"
+    # Strom: Preise aus EEDC oder aus den Optionen
+    preisquelle: str = "manuell"
 
     @property
     def titel(self) -> str:
@@ -52,6 +54,7 @@ class Konfiguration:
     firefly_token: str
     aktualisierung_minuten: int
     ausschluss_stichworte: list[str]
+    eedc_url: str | None = None
     sparten: list[Sparte] = field(default_factory=list)
 
 
@@ -95,6 +98,7 @@ def aus_dict(daten: dict) -> Konfiguration:
                 einspeise_zaehler=_leer_zu_none(s.get("einspeise_zaehler")),
                 einspeiseverguetung_eur_kwh=float(s.get("einspeiseverguetung_ct_kwh", 0)) / 100,
                 einspeise_stichwort=s.get("einspeise_stichwort", "Einspeis"),
+                preisquelle=s.get("preisquelle", "eedc" if name == "strom" else "manuell"),
             )
         )
     return Konfiguration(
@@ -106,6 +110,7 @@ def aus_dict(daten: dict) -> Konfiguration:
             for w in daten.get("ausschluss_stichworte", "").split(",")
             if w.strip()
         ],
+        eedc_url=_leer_zu_none(daten.get("eedc_url")),
         sparten=sparten,
     )
 

@@ -11,6 +11,7 @@ from aiohttp.test_utils import TestServer
 from app import homeassistant as ha_mod
 from app.ausgabe import Ausgabe
 from app.berechnung import sparte_berechnen
+from app.eedc import tarife_laden
 from app.firefly import Firefly
 from app.homeassistant import HomeAssistant
 from app.konfiguration import aus_dict
@@ -113,6 +114,22 @@ def fake_firefly() -> web.Application:
     return app
 
 
+def fake_eedc() -> web.Application:
+    async def strompreise(_):
+        return web.json_response([
+            {"id": 2, "anlage_id": 1, "netzbezug_arbeitspreis_cent_kwh": 40.0, "einspeiseverguetung_cent_kwh": 8.0,
+             "grundpreis_euro_monat": 12.0, "gueltig_ab": "2026-07-01", "gueltig_bis": None,
+             "verwendung": "allgemein", "anbieter": "Testwerk", "tarifname": "Neu"},
+            {"id": 1, "anlage_id": 1, "netzbezug_arbeitspreis_cent_kwh": 30.0, "einspeiseverguetung_cent_kwh": 8.0,
+             "grundpreis_euro_monat": 12.0, "gueltig_ab": "2025-01-01", "gueltig_bis": "2026-06-30",
+             "verwendung": "allgemein", "anbieter": "Testwerk", "tarifname": "Alt"},
+        ])
+
+    app = web.Application()
+    app.router.add_get("/api/strompreise/", strompreise)
+    return app
+
+
 OPTIONEN = {
     "firefly_url": "",
     "firefly_token": "ff-token",
@@ -134,7 +151,8 @@ OPTIONEN = {
 @pytest.mark.asyncio
 async def test_alle_sparten(monkeypatch):
     zustaende: dict = {}
-    async with TestServer(fake_ha(zustaende)) as ha_srv, TestServer(fake_firefly()) as ff_srv:
+    async with TestServer(fake_ha(zustaende)) as ha_srv, TestServer(fake_firefly()) as ff_srv, \
+            TestServer(fake_eedc()) as eedc_srv:
         monkeypatch.setattr(ha_mod, "HA_URL", str(ha_srv.make_url("")).rstrip("/"))
         monkeypatch.setattr(ha_mod, "HA_TOKEN", "test-token")
         konfig = aus_dict({**OPTIONEN, "firefly_url": str(ff_srv.make_url(""))})
@@ -147,7 +165,8 @@ async def test_alle_sparten(monkeypatch):
             assert erkannt == {"strom": "sensor.netzbezug", "einspeisung": "sensor.einspeisung",
                                "gas": "sensor.gaszaehler", "wasser": "sensor.wasserzaehler"}
             ff = Firefly(s, konfig.firefly_url, konfig.firefly_token)
-            ergebnisse = {sp.name: await sparte_berechnen(sp, konfig, ha, ff, erkannt) for sp in konfig.sparten}
+            eedc = await tarife_laden(s, str(eedc_srv.make_url("")), HEUTE)
+            ergebnisse = {sp.name: await sparte_berechnen(sp, konfig, ha, ff, erkannt, eedc) for sp in konfig.sparten}
 
             strom = ergebnisse["strom"]
             assert strom["fehler"] is None
@@ -155,7 +174,10 @@ async def test_alle_sparten(monkeypatch):
             assert strom["menge"]["methode"].startswith("vorjahr")
             assert strom["menge"]["gesamt"] == pytest.approx(365 * 8)
             assert strom["abrechnung"]["anzahl_gezahlt"] == 11  # Nachzahlung ignoriert
-            kosten = 365 * 8 * 0.30 + 12 * 12
+            # Preiswechsel aus EEDC zum 1.7.: 181 Tage à 30 ct, 184 Tage à 40 ct
+            kosten = 181 * 8 * 0.30 + 184 * 8 * 0.40 + 12 * 12
+            assert strom["preise"]["quelle"].startswith("EEDC")
+            assert len(strom["preise"]["tarife"]) == 2
             assert strom["abrechnung"]["kosten_prognose"] == pytest.approx(kosten)
             assert strom["abrechnung"]["saldo"] == pytest.approx(kosten - 12 * 90)
             assert strom["einspeisung"]["menge_prognose"] == pytest.approx(365 * 5)

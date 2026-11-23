@@ -130,8 +130,11 @@ function karte(s) {
       <dl>
         <dt>Zähler</dt><dd>${esc(s.zaehler)}</dd>
         <dt>Methode</dt><dd>${esc(m.methode)}</dd>
-        <dt>Preis je ${esc(m.einheit)}</dt><dd>${zahl(s.preise.preis_eur_einheit * 100, 2)} ct</dd>
-        <dt>Grundpreis/Jahr</dt><dd>${eur.format(s.preise.grundpreis_eur_jahr)}</dd>
+        <dt>Preisquelle</dt><dd>${esc(s.preise.quelle)}</dd>
+        ${s.preise.tarife.map(t => `<dt>${t.gueltig_ab ? `ab ${datum(t.gueltig_ab)}` : "Tarif"}${t.name ? ` · ${esc(t.name)}` : ""}</dt>
+          <dd>${zahl(t.preis_eur_einheit * 100, 2)} ct/${esc(m.einheit)}${t.grundpreis_eur_monat ? ` + ${eur.format(t.grundpreis_eur_monat)}/Monat` : ""}</dd>`).join("")}
+        <dt>Arbeitskosten Prognose</dt><dd>${eur.format(s.preise.arbeitskosten)}</dd>
+        <dt>Grundkosten</dt><dd>${eur.format(s.preise.grundkosten)}</dd>
       </dl>
       ${abschl ? `<strong>Abschläge</strong><table>${abschl}</table>` : "<p>Keine Abschläge in Firefly gefunden.</p>"}
       ${ign ? `<p><strong>Nicht berücksichtigt</strong></p><table>${ign}</table>` : ""}

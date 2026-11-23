@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 
 import aiohttp
 import paho.mqtt.client as mqtt
 
-from .homeassistant import HomeAssistant
+from .homeassistant import HomeAssistant, supervisor_token
 
 LOG = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ def sensor_attribute(ergebnis: dict) -> dict:
 
 
 async def mqtt_zugang(sitzung: aiohttp.ClientSession) -> dict | None:
-    token = os.environ.get("SUPERVISOR_TOKEN")
+    token = supervisor_token()
     if not token:
         return None
     try:

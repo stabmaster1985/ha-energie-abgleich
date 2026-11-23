@@ -208,6 +208,61 @@ def kosten(menge: float, preis_eur_einheit: float, grundpreis_eur_monat: float) 
     return menge * preis_eur_einheit + grundpreis_eur_monat * 12
 
 
+@dataclass
+class Tarif:
+    gueltig_ab: date
+    gueltig_bis: date | None  # einschließlich; None = unbefristet
+    preis_eur_einheit: float
+    grundpreis_eur_monat: float | None = None
+    einspeiseverguetung_eur_kwh: float = 0.0
+    name: str | None = None
+
+    def gilt_am(self, t: date) -> bool:
+        return self.gueltig_ab <= t and (self.gueltig_bis is None or t <= self.gueltig_bis)
+
+
+@dataclass
+class Kostenrechnung:
+    kosten: float
+    arbeitskosten: float
+    grundkosten: float
+    tage_ohne_tarif: int
+    verwendete_tarife: list[Tarif]
+
+
+def kosten_tagesgenau(
+    menge_je_tag: dict[date, float],
+    tarife: list[Tarif],
+    start: date,
+    ende: date,
+    ersatz_preis: float,
+    ersatz_grundpreis_monat: float,
+    faktor: float = 1.0,
+) -> Kostenrechnung:
+    """Kosten mit dem am jeweiligen Tag gültigen Tarif (Preisänderungen im Jahr).
+
+    Der Grundpreis wird tageweise anteilig berechnet (Monatspreis × 12 / Tage
+    im Abrechnungsjahr). Tage ohne passenden Tarif nutzen die Ersatzwerte.
+    """
+    jahrestage = (ende - start).days
+    arbeit = grund = 0.0
+    ohne = 0
+    genutzt: list[Tarif] = []
+    for t in tage(start, ende):
+        tarif = next((x for x in reversed(tarife) if x.gilt_am(t)), None)
+        if tarif is None:
+            ohne += 1
+            preis, gp = ersatz_preis, ersatz_grundpreis_monat
+        else:
+            preis = tarif.preis_eur_einheit
+            gp = tarif.grundpreis_eur_monat if tarif.grundpreis_eur_monat else ersatz_grundpreis_monat
+            if tarif not in genutzt:
+                genutzt.append(tarif)
+        arbeit += menge_je_tag.get(t, 0.0) * faktor * preis
+        grund += gp * 12 / jahrestage
+    return Kostenrechnung(arbeit + grund, arbeit, grund, ohne, genutzt)
+
+
 def abrechnung(
     kosten_prognose: float,
     zahlungen: list[float],

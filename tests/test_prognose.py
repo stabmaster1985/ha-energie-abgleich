@@ -109,3 +109,54 @@ def test_ein_jahr_frueher():
     assert p.ein_jahr_frueher(date(2028, 2, 29)) == date(2027, 2, 28)
     assert p.ein_jahr_frueher(date(2026, 5, 5)) == date(2025, 5, 5)
     assert date(2026, 1, 1) - timedelta(days=1) == date(2025, 12, 31)
+
+
+def test_supervisor_token_aus_s6_datei(tmp_path, monkeypatch):
+    from app import homeassistant as ha
+
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    (tmp_path / "SUPERVISOR_TOKEN").write_text("geheim\n")
+    monkeypatch.setattr(ha, "S6_UMGEBUNG", tmp_path)
+    assert ha.supervisor_token() == "geheim"
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "aus-env")
+    assert ha.supervisor_token() == "aus-env"
+
+
+def test_kosten_tagesgenau_mit_preisaenderung():
+    start, ende = date(2026, 1, 1), date(2027, 1, 1)
+    menge = {t: 10.0 for t in p.tage(start, ende)}
+    tarife = [
+        p.Tarif(date(2025, 1, 1), date(2026, 6, 30), 0.30, 12.0),
+        p.Tarif(date(2026, 7, 1), None, 0.40, None),  # ohne Grundpreis -> Ersatz
+    ]
+    r = p.kosten_tagesgenau(menge, tarife, start, ende, 0.99, 10.0)
+    tage_h1 = (date(2026, 7, 1) - start).days
+    assert r.arbeitskosten == pytest.approx(tage_h1 * 10 * 0.30 + (365 - tage_h1) * 10 * 0.40)
+    assert r.grundkosten == pytest.approx(tage_h1 * 144 / 365 + (365 - tage_h1) * 120 / 365)
+    assert r.tage_ohne_tarif == 0 and len(r.verwendete_tarife) == 2
+
+
+def test_kosten_tagesgenau_ohne_tarife_wie_pauschal():
+    start, ende = date(2026, 1, 1), date(2027, 1, 1)
+    menge = {t: 2.0 for t in p.tage(start, ende)}
+    r = p.kosten_tagesgenau(menge, [], start, ende, 0.30, 12.0)
+    assert r.kosten == pytest.approx(p.kosten(730, 0.30, 12.0))
+    assert r.tage_ohne_tarif == 365
+
+
+def test_eedc_tarife_aus_antwort():
+    from app.eedc import standard_urls, tarife_aus_antwort
+
+    daten = [
+        {"netzbezug_arbeitspreis_cent_kwh": 31.5, "einspeiseverguetung_cent_kwh": 7.86,
+         "grundpreis_euro_monat": 14.9, "gueltig_ab": "2026-01-01", "gueltig_bis": None,
+         "anbieter": "Stadtwerke", "tarifname": "Fix24", "verwendung": "allgemein"},
+        {"netzbezug_arbeitspreis_cent_kwh": 25.0, "einspeiseverguetung_cent_kwh": 0,
+         "gueltig_ab": "2026-01-01", "verwendung": "wallbox"},
+    ]
+    t = tarife_aus_antwort(daten)
+    assert len(t) == 1
+    assert t[0].preis_eur_einheit == pytest.approx(0.315)
+    assert t[0].einspeiseverguetung_eur_kwh == pytest.approx(0.0786)
+    assert t[0].name == "Stadtwerke · Fix24"
+    assert standard_urls()[0] == "http://bc122c22-eedc:8099"

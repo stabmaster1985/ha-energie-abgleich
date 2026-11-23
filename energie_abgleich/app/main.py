@@ -14,6 +14,7 @@ from aiohttp import web
 from . import konfiguration
 from .ausgabe import Ausgabe, mqtt_zugang
 from .berechnung import sparte_berechnen
+from .eedc import EEDCFehler, tarife_laden
 from .firefly import Firefly
 from .homeassistant import HomeAssistant
 
@@ -61,11 +62,17 @@ class Dienst:
             try:
                 await self.ha.verbinden()
                 erkannt = await self.ha.energie_zaehler()
+                eedc = None
+                if any(sp.name == "strom" and sp.preisquelle == "eedc" for sp in self.konfig.sparten):
+                    try:
+                        eedc = await tarife_laden(self._sitzung, self.konfig.eedc_url, self.ha.heute())
+                    except EEDCFehler as e:
+                        LOG.warning("%s", e)
                 sparten = []
                 for sparte in self.konfig.sparten:
                     try:
                         ergebnis = await sparte_berechnen(
-                            sparte, self.konfig, self.ha, self.firefly, erkannt
+                            sparte, self.konfig, self.ha, self.firefly, erkannt, eedc
                         )
                     except Exception as e:  # noqa: BLE001
                         LOG.exception("Fehler bei %s", sparte.titel)

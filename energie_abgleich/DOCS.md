@@ -10,7 +10,7 @@ in **Firefly III**.
 |---|---|
 | Verbrauch | Langzeitstatistik der Zähler, die im **Energie-Dashboard** hinterlegt sind (oder `zaehler` in den Optionen) |
 | Zahlungen | Firefly-Buchungen der jeweiligen **Kategorie** (`Strom`, `Gas`, `Gelsenwasser`) im Abrechnungsjahr |
-| Preise | Add-on-Optionen (Arbeitspreis, Grundpreis) |
+| Preise | Strom: **EEDC** (Tarife mit Gültigkeit), sonst Add-on-Optionen; Gas/Wasser: Add-on-Optionen |
 
 ## Einrichtung
 
@@ -25,6 +25,17 @@ in **Firefly III**.
    - Wasser: `abwasser_eur_m3`, falls Abwasser mit abgerechnet wird; `max_m3_pro_tag` als
      Plausibilitätsgrenze.
 4. Add-on starten. Die Oberfläche erscheint als **Energie-Abgleich** in der Seitenleiste.
+
+## Strompreise aus EEDC
+
+Mit `preisquelle: eedc` (Standard) liest das Add-on die Stromtarife aus EEDC
+(*Einstellungen → Strompreise*, Verwendung „allgemein“). Ändert sich der Preis im
+Abrechnungsjahr, wird jeder Tag mit dem dann gültigen Tarif gerechnet. Fehlt in EEDC
+der Grundpreis oder für einzelne Tage ein Tarif, gelten die Werte aus den Optionen.
+
+EEDC wird im internen Add-on-Netz automatisch gesucht (`http://bc122c22-eedc:8099`).
+Klappt das nicht, den **Hostnamen** von der EEDC-Add-on-Seite in `eedc_url` eintragen,
+z. B. `http://bc122c22-eedc:8099`. Mit `preisquelle: manuell` wird EEDC nicht abgefragt.
 
 ## Abschläge in Firefly
 

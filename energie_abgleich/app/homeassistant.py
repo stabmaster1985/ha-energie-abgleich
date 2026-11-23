@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 import logging
 import os
+from pathlib import Path
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -12,10 +13,25 @@ import aiohttp
 
 LOG = logging.getLogger(__name__)
 
-SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
+S6_UMGEBUNG = Path("/run/s6/container_environment")
+
+
+def supervisor_token() -> str:
+    """Supervisor-Token aus der Umgebung oder – bei s6-overlay, das die Umgebung
+    des Dienstes leert – aus /run/s6/container_environment."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if token:
+        return token
+    datei = S6_UMGEBUNG / "SUPERVISOR_TOKEN"
+    try:
+        return datei.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 # Für Tests außerhalb des Add-ons: HA_URL=http://ha:8123 HA_TOKEN=<long-lived token>
 HA_URL = os.environ.get("HA_URL", "http://supervisor/core").rstrip("/")
-HA_TOKEN = os.environ.get("HA_TOKEN", SUPERVISOR_TOKEN)
+HA_TOKEN = os.environ.get("HA_TOKEN") or supervisor_token()
 
 
 class HAFehler(Exception):
@@ -70,6 +86,11 @@ class HomeAssistant:
     async def verbinden(self) -> None:
         if self._ws is not None and not self._ws.closed:
             return
+        if not HA_TOKEN:
+            raise HAFehler(
+                "Kein Supervisor-Token gefunden. Ist 'homeassistant_api: true' gesetzt "
+                "und das Add-on nach dem Update neu gestartet?"
+            )
         ws_url = HA_URL.replace("http", "ws", 1) + "/websocket"
         self._ws = await self._s.ws_connect(ws_url, heartbeat=30)
         msg = await self._ws.receive_json()
@@ -78,7 +99,10 @@ class HomeAssistant:
         await self._ws.send_json({"type": "auth", "access_token": HA_TOKEN})
         msg = await self._ws.receive_json()
         if msg.get("type") != "auth_ok":
-            raise HAFehler("Anmeldung bei Home Assistant fehlgeschlagen.")
+            raise HAFehler(
+                f"Anmeldung bei Home Assistant fehlgeschlagen ({msg.get('type')}: "
+                f"{msg.get('message', '')}). Token-Länge: {len(HA_TOKEN)}."
+            )
         konfig = await self.befehl({"type": "get_config"})
         if konfig.get("time_zone"):
             self.zeitzone = ZoneInfo(konfig["time_zone"])
