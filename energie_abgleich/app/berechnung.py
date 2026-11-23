@@ -54,6 +54,15 @@ async def sparte_berechnen(
     ergebnis["zaehler"] = zaehler
 
     meta = (await ha.metadaten([zaehler])).get(zaehler, {})
+    if not meta:
+        ergebnis["fehler"] = (
+            f"Für „{zaehler}“ gibt es in Home Assistant keine Langzeitstatistik. "
+            + ("Der Zähler ist in den Add-on-Optionen eingetragen – Schreibweise prüfen "
+               "(Entwicklerwerkzeuge → Statistiken zeigt die gültigen IDs)."
+               if sparte.zaehler else
+               "Er stammt aus dem Energie-Dashboard; bitte dort prüfen, ob der Zähler noch existiert.")
+        )
+        return ergebnis
     einheit_zaehler = meta.get("statistics_unit_of_measurement") or ""
     vorjahr_start = p.ein_jahr_frueher(start)
     if sparte.zaehler_einheit in VOLUMEN_FAKTOR:
@@ -236,8 +245,20 @@ async def sparte_berechnen(
             ergebnis["hinweise"].append(f"Firefly: {e}")
 
     a = p.abrechnung(
-        kosten, [b.betrag for b in abschlaege], sparte.abschlag_eur, sparte.abschlaege_pro_jahr
+        kosten,
+        [b.betrag for b in abschlaege],
+        sparte.abschlag_eur,
+        sparte.abschlaege_pro_jahr,
+        heute=heute,
+        ende=ende,
+        zahlungsdaten=[b.datum for b in abschlaege],
     )
+    if abschlaege and len(abschlaege) + 2 < (heute - start).days * sparte.abschlaege_pro_jahr / 365:
+        ergebnis["hinweise"].append(
+            f"Nur {len(abschlaege)} Abschläge in Firefly gefunden – erwartet wären etwa "
+            f"{round((heute - start).days * sparte.abschlaege_pro_jahr / 365)}. Unter „Details → "
+            "Nicht berücksichtigt“ prüfen, ob Zahlungen fehlen oder falsch kategorisiert sind."
+        )
     ergebnis["abrechnung"] = a.__dict__
     ergebnis["preise"] = {
         "quelle": preisquelle,

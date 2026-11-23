@@ -160,3 +160,21 @@ def test_eedc_tarife_aus_antwort():
     assert t[0].einspeiseverguetung_eur_kwh == pytest.approx(0.0786)
     assert t[0].name == "Stadtwerke · Fix24"
     assert standard_urls()[0] == "http://bc122c22-eedc:8099"
+
+
+def test_offene_raten_nach_kalender():
+    ende = date(2027, 1, 1)
+    # 23.11., November schon bezahlt -> nur Dezember offen
+    assert p.offene_raten_kalender(date(2026, 11, 23), ende, date(2026, 11, 15), 12) == 1
+    # November noch nicht gebucht -> November + Dezember
+    assert p.offene_raten_kalender(date(2026, 11, 23), ende, date(2026, 10, 15), 12) == 2
+    # Abrechnungsjahr bis 1.3.: Dez, Jan, Feb
+    assert p.offene_raten_kalender(date(2026, 11, 23), date(2027, 3, 1), date(2026, 11, 1), 12) == 3
+
+
+def test_abrechnung_kalender_begrenzt_offene_raten():
+    # Wie im Screenshot: nur 1 Zahlung gefunden, aber im November -> nur Dezember offen
+    a = p.abrechnung(1333.78, [80.10], 110.0, 12, heute=date(2026, 11, 23),
+                     ende=date(2027, 1, 1), zahlungsdaten=[date(2026, 11, 3)])
+    assert a.offene_abschlaege == 1
+    assert a.saldo == pytest.approx(1333.78 - 80.10 - 110.0)

@@ -49,7 +49,7 @@ def fake_ha(gesetzte_zustaende: dict) -> web.Application:
                 ]}
             elif typ == "recorder/get_statistics_metadata":
                 res = [{"statistic_id": s, "statistics_unit_of_measurement": ZAEHLER[s][0],
-                        "unit_class": ZAEHLER[s][1]} for s in d["statistic_ids"]]
+                        "unit_class": ZAEHLER[s][1]} for s in d["statistic_ids"] if s in ZAEHLER]
             elif typ == "recorder/statistics_during_period":
                 sid = d["statistic_ids"][0]
                 beginn = datetime.fromisoformat(d["start_time"]).date()
@@ -303,4 +303,20 @@ async def test_wasserzaehler_mit_falscher_einheit_liter(monkeypatch):
             assert korrigiert["menge"]["gesamt"] == pytest.approx(365 * 0.3, rel=0.01)  # 3.3. ist Ausreißer
             assert any("als „m³“ gelesen" in h for h in korrigiert["hinweise"])
             assert not any("Unplausibel" in h for h in korrigiert["hinweise"])
+            await ha.schliessen()
+
+
+@pytest.mark.asyncio
+async def test_unbekannte_statistik_gibt_klaren_fehler(monkeypatch):
+    async with TestServer(fake_ha({})) as ha_srv:
+        monkeypatch.setattr(ha_mod, "HA_URL", str(ha_srv.make_url("")).rstrip("/"))
+        monkeypatch.setattr(ha_mod, "HA_TOKEN", "test-token")
+        async with aiohttp.ClientSession() as s:
+            ha = HomeAssistant(s)
+            opt = {**OPTIONEN, "strom": {"aktiv": False}, "gas": {"aktiv": False},
+                   "wasser": {**OPTIONEN["wasser"], "zaehler": "sensor.wasser_tippfehler"}}
+            k = aus_dict(opt)
+            e = await sparte_berechnen(k.sparten[0], k, ha, None, {})
+            assert "keine Langzeitstatistik" in e["fehler"]
+            assert "Entwicklerwerkzeuge → Statistiken" in e["fehler"]
             await ha.schliessen()

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2
+
+- **Fix:** Offene Abschläge wurden als „pro Jahr minus gefundene Zahlungen“ gerechnet.
+  Fehlten Zahlungen in Firefly, setzte die Prognose z. B. am 23.11. noch 11 Raten an.
+  Jetzt zählen nur Raten, die bis Ende des Abrechnungsjahres noch fällig werden.
+- Hinweis, wenn deutlich weniger Abschläge in Firefly gefunden werden als erwartet.
+- **Fix:** Die Oberfläche wird nicht mehr vom Browser zwischengespeichert – nach einem
+  Update erscheinen neue Funktionen (z. B. der Vorjahres-Block) sofort.
+- Klare Fehlermeldung, wenn es für den Zähler keine Langzeitstatistik gibt.
+
 ## 0.3.1
 
 - **Neu:** `zaehler_einheit` für Gas und Wasser (`auto` | `m³` | `L`). Für Zähler, die

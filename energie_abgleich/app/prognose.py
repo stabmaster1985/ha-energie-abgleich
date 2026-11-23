@@ -280,16 +280,52 @@ def kosten_tagesgenau(
     return Kostenrechnung(arbeit + grund, arbeit, grund, ohne, genutzt)
 
 
+def offene_raten_kalender(
+    heute: date, ende: date, letzte_zahlung: date | None, abschlaege_pro_jahr: int
+) -> int:
+    """Wie viele Abschläge sind bis zum Ende des Abrechnungsjahres noch fällig?
+
+    Gezählt werden der laufende Monat (falls darin noch nicht gezahlt wurde) und
+    alle folgenden Monate, deren Fälligkeitstag (Tag der letzten Zahlung, sonst
+    der 1.) vor dem Ende des Abrechnungsjahres liegt. Bei weniger als 12 Abschlägen im Jahr
+    wird anteilig gerundet.
+    """
+    tag = letzte_zahlung.day if letzte_zahlung else 1
+    bezahlt_monat = (letzte_zahlung.year, letzte_zahlung.month) if letzte_zahlung else None
+    anzahl = 0
+    jahr, monat = heute.year, heute.month
+    while True:
+        faellig = date(jahr, monat, min(tag, calendar.monthrange(jahr, monat)[1]))
+        if faellig >= ende:
+            break
+        # Laufender Monat: offen, solange darin noch nichts gebucht ist (auch wenn
+        # der Fälligkeitstag schon vorbei ist – die Buchung kann nachkommen).
+        if (jahr, monat) != bezahlt_monat:
+            anzahl += 1
+        monat += 1
+        if monat > 12:
+            jahr, monat = jahr + 1, 1
+    if abschlaege_pro_jahr < 12:
+        anzahl = math.ceil(anzahl * abschlaege_pro_jahr / 12)
+    return anzahl
+
+
 def abrechnung(
     kosten_prognose: float,
     zahlungen: list[float],
     abschlag_konfig: float,
     abschlaege_pro_jahr: int,
+    heute: date | None = None,
+    ende: date | None = None,
+    zahlungsdaten: list[date] | None = None,
 ) -> Abrechnung:
     gezahlt = sum(zahlungen)
     anzahl = len(zahlungen)
     abschlag_aktuell = abschlag_konfig if abschlag_konfig > 0 else (zahlungen[-1] if zahlungen else 0.0)
     offen = max(0, abschlaege_pro_jahr - anzahl)
+    if heute is not None and ende is not None:
+        letzte = max(zahlungsdaten) if zahlungsdaten else None
+        offen = min(offen, offene_raten_kalender(heute, ende, letzte, abschlaege_pro_jahr))
     saldo = kosten_prognose - (gezahlt + offen * abschlag_aktuell)
     empfehlung_rest = math.ceil(max(0.0, kosten_prognose - gezahlt) / offen) if offen else None
     empfehlung_folgejahr = math.ceil(kosten_prognose / abschlaege_pro_jahr)

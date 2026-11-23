@@ -103,14 +103,18 @@ class Dienst:
 
 
 async def index(_: web.Request) -> web.FileResponse:
-    return web.FileResponse(STATIC / "index.html")
+    # Nicht zwischenspeichern: sonst zeigt der Browser nach einem Update die alte Oberfläche.
+    return web.FileResponse(
+        STATIC / "index.html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 def app_bauen(dienst: Dienst) -> web.Application:
     app = web.Application()
 
     async def status(_: web.Request) -> web.Response:
-        return web.json_response(dienst.status)
+        return web.json_response(dienst.status, headers={"Cache-Control": "no-store"})
 
     async def aktualisieren(_: web.Request) -> web.Response:
         asyncio.create_task(dienst.aktualisieren())
