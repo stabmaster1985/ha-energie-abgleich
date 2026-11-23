@@ -57,6 +57,18 @@ z. B. `http://bc122c22-eedc:8099`. Mit `preisquelle: manuell` wird EEDC nicht ab
 Hinweis Strom: Seit der PV-Anlage sinkt der Netzbezug – Vorjahreswerte ohne PV sind nur
 bedingt vergleichbar. Der Skalierungsfaktor fängt das teilweise auf; sonst `linear` wählen.
 
+## Zählereinheit falsch (Liter statt m³)
+
+Zeigt das Energie-Dashboard z. B. „500 L“, obwohl der Zähler 500 m³ meint, rechnet
+Home Assistant beim Umrechnen durch 1000 – der Verbrauch erscheint als fast 0.
+
+- **Schnell:** In den Optionen bei `wasser` (bzw. `gas`) `zaehler_einheit: m³` setzen.
+  Die Rohwerte werden dann als m³ gelesen.
+- **Sauber:** Einheit des Sensors in HA auf m³ korrigieren und unter
+  *Entwicklerwerkzeuge → Statistiken* beim gemeldeten Problem „Einheit ändern“ wählen
+  – **ohne** Umrechnen, sonst werden die Altwerte durch 1000 geteilt. Danach
+  `zaehler_einheit` wieder auf `auto`.
+
 ## Vorjahr
 
 Unter jeder Sparte steht ein Rückblick auf das abgeschlossene Abrechnungsjahr:

@@ -36,6 +36,8 @@ class Sparte:
     einspeise_zaehler: str | None = None
     einspeiseverguetung_eur_kwh: float = 0.0
     einspeise_stichwort: str = "Einspeis"
+    # Gas/Wasser: Zählereinheit überschreiben ("auto" = wie in Home Assistant)
+    zaehler_einheit: str = "auto"
     # Strom: Preise aus EEDC oder aus den Optionen
     preisquelle: str = "manuell"
 
@@ -98,6 +100,7 @@ def aus_dict(daten: dict) -> Konfiguration:
                 einspeise_zaehler=_leer_zu_none(s.get("einspeise_zaehler")),
                 einspeiseverguetung_eur_kwh=float(s.get("einspeiseverguetung_ct_kwh", 0)) / 100,
                 einspeise_stichwort=s.get("einspeise_stichwort", "Einspeis"),
+                zaehler_einheit=s.get("zaehler_einheit") or "auto",
                 preisquelle=s.get("preisquelle", "eedc" if name == "strom" else "manuell"),
             )
         )

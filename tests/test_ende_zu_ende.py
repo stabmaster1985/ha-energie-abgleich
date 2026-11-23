@@ -58,6 +58,8 @@ def fake_ha(gesetzte_zustaende: dict) -> web.Application:
                 t = beginn
                 while t < ende:
                     wert = ZAEHLER[sid][2]
+                    if ZAEHLER[sid][0] == "L" and d.get("units", {}).get("volume") == "m³":
+                        wert = wert / 1000  # wie HA: L -> m³
                     if sid == "sensor.wasserzaehler" and t == date(2026, 3, 3):
                         wert = 55.0  # Ausreißer
                     ts = datetime.combine(t, datetime.min.time(), tzinfo=TZ).timestamp() * 1000
@@ -272,3 +274,33 @@ async def test_firefly_401_und_weiterleitung_diagnose():
             await Firefly(s, str(srv.make_url("/a")), "kurz\n").kategorie_id("Strom")
         with pytest.raises(FireflyFehler, match="leitet .* weiter nach https://firefly.example"):
             await Firefly(s, str(srv.make_url("/b")), "x").kategorie_id("Strom")
+
+
+@pytest.mark.asyncio
+async def test_wasserzaehler_mit_falscher_einheit_liter(monkeypatch):
+    """Zähler liefert m³-Werte, ist in HA aber mit „L“ angelegt."""
+    monkeypatch.setitem(ZAEHLER, "sensor.wasserzaehler", ("L", "volume", 0.3))
+    async with TestServer(fake_ha({})) as ha_srv:
+        monkeypatch.setattr(ha_mod, "HA_URL", str(ha_srv.make_url("")).rstrip("/"))
+        monkeypatch.setattr(ha_mod, "HA_TOKEN", "test-token")
+        async with aiohttp.ClientSession() as s:
+            ha = HomeAssistant(s)
+            monkeypatch.setattr(ha, "heute", lambda: HEUTE)
+            erkannt = await ha.energie_zaehler()
+
+            def wasser(einheit):
+                opt = {**OPTIONEN, "strom": {"aktiv": False}, "gas": {"aktiv": False},
+                       "wasser": {**OPTIONEN["wasser"], "zaehler_einheit": einheit}}
+                return aus_dict(opt)
+
+            k = wasser("auto")
+            auto = await sparte_berechnen(k.sparten[0], k, ha, None, erkannt)
+            assert auto["menge"]["gesamt"] < 1
+            assert any("Unplausibel wenig Wasser" in h for h in auto["hinweise"])
+
+            k = wasser("m³")
+            korrigiert = await sparte_berechnen(k.sparten[0], k, ha, None, erkannt)
+            assert korrigiert["menge"]["gesamt"] == pytest.approx(365 * 0.3, rel=0.01)  # 3.3. ist Ausreißer
+            assert any("als „m³“ gelesen" in h for h in korrigiert["hinweise"])
+            assert not any("Unplausibel" in h for h in korrigiert["hinweise"])
+            await ha.schliessen()

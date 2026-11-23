@@ -15,6 +15,9 @@ LOG = logging.getLogger(__name__)
 
 EINHEITEN = {"energy": "kWh", "volume": "m³"}
 
+# Faktor auf m³, wenn die Rohwerte als diese Einheit gelesen werden sollen
+VOLUMEN_FAKTOR = {"m³": 1.0, "L": 0.001}
+
 
 def _buchung_dict(b) -> dict:
     return {"datum": b.datum.isoformat(), "betrag": b.betrag, "beschreibung": b.beschreibung}
@@ -53,7 +56,20 @@ async def sparte_berechnen(
     meta = (await ha.metadaten([zaehler])).get(zaehler, {})
     einheit_zaehler = meta.get("statistics_unit_of_measurement") or ""
     vorjahr_start = p.ein_jahr_frueher(start)
-    roh = await ha.tagesmengen(zaehler, vorjahr_start, heute, EINHEITEN)
+    if sparte.zaehler_einheit in VOLUMEN_FAKTOR:
+        # Einheit in HA falsch (z. B. „L“, obwohl der Zähler m³ liefert):
+        # Rohwerte holen und so lesen, wie in den Optionen angegeben.
+        roh = await ha.tagesmengen(zaehler, vorjahr_start, heute, {})
+        umrechnung = VOLUMEN_FAKTOR[sparte.zaehler_einheit]
+        roh = {t: v * umrechnung for t, v in roh.items()}
+        if einheit_zaehler != sparte.zaehler_einheit:
+            ergebnis["hinweise"].append(
+                f"Zähler ist in Home Assistant mit „{einheit_zaehler}“ angelegt, "
+                f"Werte werden laut Optionen als „{sparte.zaehler_einheit}“ gelesen."
+            )
+        einheit_zaehler = "m³"
+    else:
+        roh = await ha.tagesmengen(zaehler, vorjahr_start, heute, EINHEITEN)
     vorjahr_roh = {t: v for t, v in roh.items() if t < start}
     ist_roh = {t: v for t, v in roh.items() if t >= start}
 
@@ -79,6 +95,18 @@ async def sparte_berechnen(
         ber.werte, vj.werte, start, ende, heute, sparte.prognose_methode, sparte.name
     )
     ergebnis["hinweise"].extend(mp.hinweise)
+    if (
+        sparte.name == "wasser"
+        and sparte.zaehler_einheit == "auto"
+        and einheit_zaehler == "L"
+        and len(ber.werte) >= 14
+        and mp.gesamt < 5
+    ):
+        ergebnis["hinweise"].append(
+            f"Unplausibel wenig Wasser ({mp.gesamt:.3f} m³/Jahr). Der Zähler ist in Home Assistant "
+            "mit „L“ angelegt – liefert er eigentlich m³? Dann in den Optionen "
+            "wasser → zaehler_einheit auf „m³“ stellen oder die Einheit in HA korrigieren."
+        )
 
     # Gas in m³ -> kWh umrechnen
     faktor = 1.0

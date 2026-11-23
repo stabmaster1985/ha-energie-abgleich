@@ -146,17 +146,17 @@ class HomeAssistant:
         """Tägliche Verbrauchsänderung [start, ende) in Ortszeit."""
         beginn = datetime.combine(start, datetime.min.time(), tzinfo=self.zeitzone)
         schluss = datetime.combine(ende, datetime.min.time(), tzinfo=self.zeitzone)
-        antwort = await self.befehl(
-            {
-                "type": "recorder/statistics_during_period",
-                "start_time": beginn.isoformat(),
-                "end_time": schluss.isoformat(),
-                "statistic_ids": [statistik_id],
-                "period": "day",
-                "types": ["change"],
-                "units": einheiten,
-            }
-        )
+        anfrage = {
+            "type": "recorder/statistics_during_period",
+            "start_time": beginn.isoformat(),
+            "end_time": schluss.isoformat(),
+            "statistic_ids": [statistik_id],
+            "period": "day",
+            "types": ["change"],
+        }
+        if einheiten:  # leer = Rohwerte in der gespeicherten Einheit
+            anfrage["units"] = einheiten
+        antwort = await self.befehl(anfrage)
         return tageswerte((antwort or {}).get(statistik_id, []), self.zeitzone)
 
     async def zustand_setzen(self, entity_id: str, zustand, attribute: dict) -> None:

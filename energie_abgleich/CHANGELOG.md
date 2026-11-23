@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- **Neu:** `zaehler_einheit` für Gas und Wasser (`auto` | `m³` | `L`). Für Zähler, die
+  m³ liefern, in Home Assistant aber mit „L“ angelegt sind (Verbrauch erschien als ~0).
+- Hinweis bei unplausibel geringem Wasserverbrauch mit Zählereinheit „L“.
+
 ## 0.3.0
 
 - **Neu: Vorjahr.** Je Sparte ein Rückblick auf das abgeschlossene Abrechnungsjahr:
