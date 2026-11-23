@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energie-Abgleich</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --karte: #ffffff; --text: #1c1f24; --leise: #5f6670;
+    --linie: #e3e6ea; --akzent: #03a9f4; --ist: #2b7fd9; --prog: #9fc6ef;
+    --gut: #1e8e4a; --schlecht: #c62828; --warn-bg: #fff6e0; --warn: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111316; --karte: #1c1f24; --text: #e8eaed; --leise: #9aa1ab;
+      --linie: #2c3037; --ist: #5aa2ee; --prog: #2f4e70;
+      --gut: #4cc27a; --schlecht: #ef6461; --warn-bg: #3a2f14; --warn: #f0c66b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+           padding: 16px; max-width: 1200px; margin: 0 auto; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .stand { color: var(--leise); font-size: 13px; }
+  button { background: var(--akzent); color: #fff; border: 0; border-radius: 8px;
+           padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  main { display: grid; gap: 16px; padding: 0 16px 24px; max-width: 1200px; margin: 0 auto;
+         grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .karte { background: var(--karte); border: 1px solid var(--linie); border-radius: 12px;
+           padding: 16px; min-width: 0; }
+  .karte h2 { margin: 0 0 2px; font-size: 18px; }
+  .zeitraum { color: var(--leise); font-size: 13px; margin-bottom: 12px; }
+  .saldo { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .saldo-text { color: var(--leise); font-size: 13px; margin-bottom: 12px; }
+  .gut { color: var(--gut); } .schlecht { color: var(--schlecht); }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 12px 0; }
+  dt { color: var(--leise); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .empfehlung { border-top: 1px solid var(--linie); padding-top: 10px; margin-top: 4px; }
+  .hinweis { background: var(--warn-bg); color: var(--warn); border-radius: 8px;
+             padding: 8px 10px; font-size: 13px; margin-top: 8px; }
+  .fehler { background: var(--warn-bg); color: var(--schlecht); border-radius: 8px; padding: 10px; }
+  svg { width: 100%; height: auto; display: block; margin-top: 8px; }
+  .legende { display: flex; gap: 14px; font-size: 12px; color: var(--leise); }
+  .legende span::before { content: ""; display: inline-block; width: 10px; height: 10px;
+                          border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--leise); }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  td { padding: 3px 0; border-bottom: 1px solid var(--linie); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .leer { color: var(--leise); padding: 24px; text-align: center; grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Energie-Abgleich</h1>
+    <div class="stand" id="stand">Lade …</div>
+  </div>
+  <button id="neu">Neu berechnen</button>
+</header>
+<main id="inhalt"><div class="leer">Lade Daten …</div></main>
+
+<script>
+const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
+const zahl = (n, d = 0) => n == null ? "–" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: d }).format(n);
+const datum = s => s ? new Date(s).toLocaleDateString("de-DE") : "–";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+
+function diagramm(verlauf, einheit) {
+  if (!verlauf || !verlauf.length) return "";
+  const B = 360, H = 150, L = 4, U = 20, O = 8;
+  const max = Math.max(...verlauf.map(m => m.ist + m.prognose), 1e-9);
+  const bw = (B - L) / verlauf.length;
+  const balken = verlauf.map((m, i) => {
+    const x = L + i * bw + bw * 0.15, w = bw * 0.7;
+    const hi = (m.ist / max) * (H - U - O), hp = (m.prognose / max) * (H - U - O);
+    const y0 = H - U;
+    const titel = `${m.monat}: Ist ${zahl(m.ist, 1)} ${einheit}, Prognose ${zahl(m.prognose, 1)} ${einheit}`;
+    return `<g><title>${esc(titel)}</title>
+      <rect x="${x}" y="${y0 - hi}" width="${w}" height="${hi}" rx="2" fill="var(--ist)"/>
+      <rect x="${x}" y="${y0 - hi - hp}" width="${w}" height="${hp}" rx="2" fill="var(--prog)"/>
+      <text x="${x + w / 2}" y="${H - 6}" font-size="9" text-anchor="middle" fill="var(--leise)">${MONATE[+m.monat.slice(5) - 1]}</text></g>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${B} ${H}" role="img" aria-label="Verbrauch je Monat">${balken}</svg>
+    <div class="legende"><span style="--c:var(--ist)">Ist</span><span style="--c:var(--prog)">Prognose</span><span>je Monat in ${esc(einheit)}</span></div>`;
+}
+
+function karte(s) {
+  if (s.fehler && !s.abrechnung) {
+    return `<section class="karte"><h2>${esc(s.titel)}</h2><div class="fehler">${esc(s.fehler)}</div></section>`;
+  }
+  const a = s.abrechnung, m = s.menge;
+  const nach = a.saldo > 0;
+  const hinweise = (s.hinweise || []).map(h => `<div class="hinweis">${esc(h)}</div>`).join("");
+  const abschl = (s.buchungen?.abschlaege || []).map(b => `<tr><td>${datum(b.datum)} · ${esc(b.beschreibung)}</td><td>${eur.format(b.betrag)}</td></tr>`).join("");
+  const ign = (s.buchungen?.ignoriert || []).map(b => `<tr><td>${datum(b.datum)} · ${esc(b.beschreibung)} <em>(${esc(b.grund)})</em></td><td>${eur.format(b.betrag)}</td></tr>`).join("");
+  const e = s.einspeisung;
+  const einsp = e ? `<dl>
+      <dt>Eingespeist bisher</dt><dd>${zahl(e.menge_ist, 0)} kWh</dd>
+      <dt>Vergütung Soll bisher</dt><dd>${eur.format(e.verguetung_soll_bisher)}</dd>
+      <dt>Vergütung erhalten</dt><dd>${eur.format(e.erhalten)}</dd>
+      <dt>Vergütung Prognose Jahr</dt><dd>${eur.format(e.verguetung_prognose)}</dd></dl>` : "";
+  return `<section class="karte">
+    <h2>${esc(s.titel)}</h2>
+    <div class="zeitraum">Abrechnungsjahr ${datum(s.zeitraum.start)} – ${datum(s.zeitraum.ende)}</div>
+    <div class="saldo ${nach ? "schlecht" : "gut"}">${eur.format(Math.abs(a.saldo))}</div>
+    <div class="saldo-text">voraussichtliche ${nach ? "Nachzahlung" : "Erstattung"}</div>
+    <dl>
+      <dt>Verbrauch bisher</dt><dd>${zahl(m.ist, 1)} ${esc(m.einheit)}</dd>
+      <dt>Verbrauch Prognose</dt><dd>${zahl(m.gesamt, 0)} ${esc(m.einheit)}</dd>
+      <dt>Kosten Prognose</dt><dd>${eur.format(a.kosten_prognose)}</dd>
+      <dt>Abschläge gezahlt (${a.anzahl_gezahlt})</dt><dd>${eur.format(a.gezahlt)}</dd>
+      <dt>Noch offen (${a.offene_abschlaege} × ${eur.format(a.abschlag_aktuell)})</dt><dd>${eur.format(a.offene_abschlaege * a.abschlag_aktuell)}</dd>
+    </dl>
+    <dl class="empfehlung">
+      ${a.empfehlung_rest == null ? "" : a.empfehlung_rest === 0
+        ? `<dt>Restliche Abschläge</dt><dd>bereits ausreichend bezahlt</dd>`
+        : `<dt>Passender Abschlag für die restlichen Monate</dt><dd><strong>${eur.format(a.empfehlung_rest)}</strong></dd>`}
+      <dt>Passender Abschlag Folgejahr</dt><dd>${eur.format(a.empfehlung_folgejahr)}</dd>
+    </dl>
+    ${einsp}
+    ${diagramm(s.verlauf, m.einheit)}
+    ${hinweise}
+    <details><summary>Details</summary>
+      <dl>
+        <dt>Zähler</dt><dd>${esc(s.zaehler)}</dd>
+        <dt>Methode</dt><dd>${esc(m.methode)}</dd>
+        <dt>Preis je ${esc(m.einheit)}</dt><dd>${zahl(s.preise.preis_eur_einheit * 100, 2)} ct</dd>
+        <dt>Grundpreis/Jahr</dt><dd>${eur.format(s.preise.grundpreis_eur_jahr)}</dd>
+      </dl>
+      ${abschl ? `<strong>Abschläge</strong><table>${abschl}</table>` : "<p>Keine Abschläge in Firefly gefunden.</p>"}
+      ${ign ? `<p><strong>Nicht berücksichtigt</strong></p><table>${ign}</table>` : ""}
+    </details>
+  </section>`;
+}
+
+async function laden() {
+  const r = await fetch("api/status");
+  const d = await r.json();
+  document.getElementById("stand").textContent =
+    d.laeuft ? "Berechnung läuft …" : d.aktualisiert ? `Stand: ${new Date(d.aktualisiert).toLocaleString("de-DE")}` : "Noch keine Berechnung";
+  const inhalt = document.getElementById("inhalt");
+  if (d.fehler) inhalt.innerHTML = `<div class="karte fehler">${esc(d.fehler)}</div>`;
+  else if (!d.sparten.length) inhalt.innerHTML = `<div class="leer">${d.laeuft ? "Berechnung läuft …" : "Keine Sparte aktiv."}</div>`;
+  else inhalt.innerHTML = d.sparten.map(karte).join("");
+  document.getElementById("neu").disabled = d.laeuft;
+  return d.laeuft;
+}
+
+document.getElementById("neu").addEventListener("click", async () => {
+  await fetch("api/aktualisieren", { method: "POST" });
+  const warten = async () => { if (await laden()) setTimeout(warten, 1500); };
+  setTimeout(warten, 500);
+});
+
+(async function start() { if (await laden()) setTimeout(start, 1500); })();
+setInterval(laden, 60000);
+</script>
+</body>
+</html>

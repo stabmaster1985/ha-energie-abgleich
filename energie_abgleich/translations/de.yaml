@@ -1,0 +1,24 @@
+configuration:
+  firefly_url:
+    name: Firefly-III-URL
+    description: Adresse deiner Firefly-III-Instanz, z. B. http://192.168.1.10:8080
+  firefly_token:
+    name: Firefly-Token
+    description: Personal Access Token aus Firefly (Optionen → Profil → OAuth).
+  aktualisierung_minuten:
+    name: Aktualisierung (Minuten)
+    description: Wie oft neu berechnet wird.
+  ausschluss_stichworte:
+    name: Ausschluss-Stichwörter
+    description: >-
+      Buchungen, deren Beschreibung eines dieser Wörter enthält, zählen nicht als
+      Abschlag (z. B. Nachzahlungen oder Erstattungen der Vorjahresabrechnung).
+  strom:
+    name: Strom
+    description: Tarif und Einstellungen für Strom. Zähler leer lassen = aus dem Energie-Dashboard.
+  gas:
+    name: Gas
+    description: Tarif und Einstellungen für Gas. Brennwert und Zustandszahl stehen auf der Jahresabrechnung.
+  wasser:
+    name: Wasser
+    description: Tarif und Einstellungen für Wasser. max_m3_pro_tag filtert unplausible Zählerwerte.
